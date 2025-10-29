@@ -3,6 +3,7 @@ import re
 import aiohttp
 import asyncio
 import discord
+import audioop
 from discord import Embed
 from flask import Flask
 from threading import Thread
