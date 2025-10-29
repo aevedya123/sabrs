@@ -67,3 +67,22 @@ async def on_ready():
     print(f"[{datetime.now(timezone.utc)}] ✅ Logged in as {client.user} (slash commands synced)")
 
 client.run(DISCORD_TOKEN)
+from flask import Flask
+from threading import Thread
+
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Bot running!"
+
+def run_web():
+    app.run(host='0.0.0.0', port=8080)
+
+if __name__ == "__main__":
+    Thread(target=run_web, daemon=True).start()
+    # your discord bot launch below:
+    import sys, types
+    sys.modules['audioop'] = types.SimpleNamespace()
+    import discord, asyncio
+    # ... rest of bot startup code ...
