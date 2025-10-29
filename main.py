@@ -6,7 +6,6 @@ import discord
 from discord import Embed
 from flask import Flask
 from threading import Thread
-import audioop
 # === Environment Variables ===
 TOKEN = os.getenv("DISCORD_TOKEN")
 CHANNEL_ID = int(os.getenv("CHANNEL_ID"))
