@@ -24,7 +24,7 @@ HEADERS = {
 }
 
 POSTED_LINKS = set()
-RETRIES = 10  # retry limit for stability
+RETRIES = 10  # retry limit
 
 def fetch_group_posts():
     """Fetch the group wall posts."""
@@ -71,19 +71,20 @@ async def send_links():
             await channel.send(embed=embed)
             print(f"✅ Sent {len(new_links[:30])} links to Discord.")
 
-        await asyncio.sleep(60)  # Run roughly once per minute
+        await asyncio.sleep(60)  # Check once per minute
 
 @client.event
 async def on_ready():
     print(f"🤖 Logged in as {client.user}")
+    client.loop.create_task(send_links())
 
 def run_bot():
     """Attempt to run bot with retries."""
+    keep_alive()  # Start once
     for attempt in range(RETRIES):
         try:
-            keep_alive()
-            client.loop.create_task(send_links())
             client.run(DISCORD_TOKEN)
+            break
         except Exception as e:
             print(f"⚠️ Bot crashed (attempt {attempt + 1}/{RETRIES}): {e}")
             time.sleep(5)
