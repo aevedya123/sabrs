@@ -4,6 +4,8 @@ import discord
 from discord.ext import commands, tasks
 import asyncio
 import datetime
+from keep_alive import keep_alive
+keep_alive()
 
 # ==== CONFIG ====
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
