@@ -1,3 +1,5 @@
+import sys, types
+sys.modules['audioop'] = types.SimpleNamespace()
 import os
 import discord
 import aiohttp
