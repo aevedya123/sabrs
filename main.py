@@ -1,3 +1,5 @@
+import sys, types
+sys.modules['audioop'] = types.SimpleNamespace()
 import os
 import asyncio
 import json
@@ -7,10 +9,6 @@ from threading import Thread
 from flask import Flask
 import discord
 from discord.ext import tasks
-
-# --- Prevent audioop import issue ---
-import sys, types
-sys.modules['audioop'] = types.SimpleNamespace()
 
 # --- Environment Variables ---
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
