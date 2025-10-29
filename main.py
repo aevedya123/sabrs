@@ -26,11 +26,6 @@ HEADERS = {
 POSTED_LINKS = set()
 RETRIES = 10  # retry limit for stability
 
-def extract_links(text):
-    """Extract Roblox links from text."""
-    pattern = r"https?://www\.roblox\.com/(share|games)\?[^ \n]+"
-    return re.findall(pattern, text)
-
 def fetch_group_posts():
     """Fetch the group wall posts."""
     try:
@@ -58,6 +53,7 @@ async def send_links():
     while not client.is_closed():
         posts = fetch_group_posts()
         new_links = []
+
         for post in posts:
             links = re.findall(r"https?://www\.roblox\.com/share\?[^ \n]+", post)
             for link in links:
@@ -91,4 +87,7 @@ def run_bot():
         except Exception as e:
             print(f"⚠️ Bot crashed (attempt {attempt + 1}/{RETRIES}): {e}")
             time.sleep(5)
-    print("❌
+    print("❌ Bot failed after max retries.")
+
+if __name__ == "__main__":
+    run_bot()
