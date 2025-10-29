@@ -9,8 +9,8 @@ import discord
 from discord.ext import tasks
 
 # --- Prevent audioop import issue ---
-import sys
-sys.modules["audioop"] = None
+import sys, types
+sys.modules['audioop'] = types.SimpleNamespace()
 
 # --- Environment Variables ---
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
