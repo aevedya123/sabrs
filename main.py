@@ -1,90 +1,112 @@
 import os
 import re
+import json
 import asyncio
+from datetime import datetime
+import aiohttp
 import discord
-import requests
 from discord import Embed
-from discord.ext import tasks, commands
-from datetime import datetime, timezone
-from flask import Flask
-from threading import Thread
+from keep_alive import keep_alive
 
-# --- ENV variables ---
-ROBLOX_COOKIE = os.getenv("ROBLOX_COOKIE")
-SERVER_ID = os.getenv("SERVER_ID")
-CHANNEL_ID = int(os.getenv("CHANNEL_ID"))
+# Start Flask keep-alive server
+keep_alive()
+
+# --- Environment variables ---
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+CHANNEL_ID = int(os.getenv("CHANNEL_ID"))
+GROUP_ID = os.getenv("GROUP_ID")
+ROBLOX_COOKIE = os.getenv("ROBLOX_COOKIE")
+
+# --- Config ---
+CHECK_INTERVAL = 60
+POSTED_FILE = "posted_links.json"
+USER_AGENT = "SABRS-LinkBot/2.0"
+SHARE_REGEX = re.compile(r"https?://(?:www\.)?roblox\.com/share\?[^\s)\"'<>]+", re.IGNORECASE)
 
 # --- Discord setup ---
 intents = discord.Intents.default()
-bot = commands.Bot(command_prefix="!", intents=intents)
+client = discord.Client(intents=intents)
 
-# --- Flask keep-alive setup ---
-app = Flask(__name__)
+def load_posted():
+    if not os.path.exists(POSTED_FILE):
+        return set()
+    try:
+        with open(POSTED_FILE, "r", encoding="utf-8") as f:
+            return set(json.load(f))
+    except:
+        return set()
 
-@app.route('/')
-def home():
-    return "✅ Bot is alive!"
+def save_posted(data):
+    with open(POSTED_FILE, "w", encoding="utf-8") as f:
+        json.dump(sorted(list(data)), f)
 
-def run_flask():
-    app.run(host='0.0.0.0', port=8080)
+async def fetch_group_wall(session, limit=30):
+    url = f"https://groups.roblox.com/v2/groups/{GROUP_ID}/wall/posts?limit={limit}&sortOrder=Desc"
+    headers = {
+        "User-Agent": USER_AGENT,
+        "Cookie": f".ROBLOSECURITY={ROBLOX_COOKIE}",
+        "Accept": "application/json"
+    }
+    async with session.get(url, headers=headers, timeout=20) as resp:
+        if resp.status == 200:
+            data = await resp.json()
+            return data.get("data", [])
+        else:
+            print(f"[{datetime.utcnow()}] Roblox API error: {resp.status}")
+            return []
 
-def keep_alive():
-    thread = Thread(target=run_flask)
-    thread.start()
+def extract_links(text):
+    return SHARE_REGEX.findall(text or "")
 
-# --- Roblox Group Post Scraper ---
-def get_group_links():
-    url = f"https://groups.roblox.com/v1/groups/{SERVER_ID}/wall/posts?limit=100"
-    headers = {"Cookie": f".ROBLOSECURITY={ROBLOX_COOKIE}"}
-    response = requests.get(url, headers=headers)
+async def poll_loop():
+    await client.wait_until_ready()
+    channel = await client.fetch_channel(CHANNEL_ID)
+    posted = load_posted()
 
-    if response.status_code != 200:
-        print(f"❌ Error {response.status_code}: {response.text}")
-        return []
+    async with aiohttp.ClientSession() as session:
+        while not client.is_closed():
+            try:
+                posts = await fetch_group_wall(session)
+                new_links = []
 
-    data = response.json()
-    posts = data.get("data", [])
-    links = []
+                for post in reversed(posts):
+                    body = post.get("body", "")
+                    pid = str(post.get("id"))
+                    links = extract_links(body)
+                    for link in links:
+                        key = f"{pid}|{link}"
+                        if key not in posted:
+                            new_links.append((link, key))
 
-    for post in posts:
-        content = post.get("body", "")
-        found_links = re.findall(r"https:\/\/www\.roblox\.com\/share\?code=[a-zA-Z0-9]+", content)
-        links.extend(found_links)
+                if new_links:
+                    BATCH = 10
+                    for i in range(0, len(new_links), BATCH):
+                        chunk = [li for li, _ in new_links[i:i+BATCH]]
+                        desc = "\n".join(f"• {c}" for c in chunk)
+                        embed = Embed(
+                            title="🔗 New Roblox Share Links",
+                            description=desc,
+                            color=0x00FFCC,
+                            timestamp=datetime.utcnow()
+                        )
+                        embed.set_footer(text=f"Made by SAB-RS • Updated {datetime.utcnow().strftime('%H:%M:%S UTC')}")
+                        await channel.send(embed=embed)
+                    
+                    for _, key in new_links:
+                        posted.add(key)
+                    save_posted(posted)
 
-    return links
+                await asyncio.sleep(CHECK_INTERVAL)
 
-# --- Task Loop to Monitor Wall ---
-@tasks.loop(seconds=60)
-async def check_group_wall():
-    channel = bot.get_channel(CHANNEL_ID)
-    if not channel:
-        print("⚠️ Channel not found.")
-        return
+            except Exception as e:
+                print(f"[{datetime.utcnow()}] Error in poll loop: {e}")
+                await asyncio.sleep(30)
 
-    links = get_group_links()
-    if not links:
-        print("ℹ️ No new links found.")
-        return
-
-    for link in links[:30]:  # Limit to 30 per minute
-        embed = Embed(
-            title="📢 New Private Server Link Found!",
-            description=f"[Join Here]({link})",
-            color=0x00ff88,
-            timestamp=datetime.now(timezone.utc)
-        )
-        embed.set_footer(text="Made by SAB-RS")
-        await channel.send(embed=embed)
-
-# --- Startup Events ---
-@bot.event
+@client.event
 async def on_ready():
-    print(f"✅ Logged in as {bot.user}")
-    if not check_group_wall.is_running():
-        check_group_wall.start()
+    print(f"[{datetime.utcnow()}] ✅ Logged in as {client.user}")
+    asyncio.create_task(poll_loop())
 
-# --- Run ---
 if __name__ == "__main__":
-    keep_alive()
-    bot.run(DISCORD_TOKEN)
+    print(f"[{datetime.utcnow()}] Starting bot...")
+    client.run(DISCORD_TOKEN)
