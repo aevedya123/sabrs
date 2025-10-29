@@ -5,6 +5,7 @@ import asyncio
 import requests
 import discord
 from discord import Embed
+from datetime import datetime
 from keep_alive import keep_alive
 
 # ---- ENVIRONMENT VARIABLES ----
@@ -27,7 +28,7 @@ class RobloxLinkBot(discord.Client):
         }
 
     async def setup_hook(self):
-        """Called when the bot is setting up (modern async-safe way)."""
+        """Async-safe setup hook (replaces on_ready loop tasks)."""
         self.bg_task = asyncio.create_task(self.monitor_group_wall())
 
     async def on_ready(self):
@@ -35,14 +36,13 @@ class RobloxLinkBot(discord.Client):
         print("✅ Bot started successfully! Monitoring group wall...")
 
     def fetch_group_posts(self):
-        """Fetch group wall posts."""
+        """Fetch posts from the group wall."""
         try:
             url = f"https://groups.roblox.com/v2/groups/{GROUP_ID}/wall/posts?limit=100&sortOrder=Desc"
             r = requests.get(url, headers=self.headers, timeout=10)
             if r.status_code == 200:
                 data = r.json()
-                posts = [p["body"] for p in data.get("data", [])]
-                return posts
+                return [p["body"] for p in data.get("data", [])]
             else:
                 print(f"⚠️ Error fetching posts: {r.status_code}")
         except Exception as e:
@@ -50,7 +50,7 @@ class RobloxLinkBot(discord.Client):
         return []
 
     async def monitor_group_wall(self):
-        """Continuously check for new share links."""
+        """Monitors the group wall for new share links."""
         await self.wait_until_ready()
         channel = self.get_channel(CHANNEL_ID)
         if not channel:
@@ -69,16 +69,17 @@ class RobloxLinkBot(discord.Client):
                         new_links.append(link)
 
             if new_links:
+                now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 embed = Embed(
                     title="🔗 New Private Server Links",
                     description="\n".join(new_links[:30]),
                     color=0x00ffcc
                 )
-                embed.set_footer(text="Made by SAB-RS")
+                embed.set_footer(text=f"Made by SAB-RS | {now}")
                 await channel.send(embed=embed)
-                print(f"✅ Sent {len(new_links[:30])} links to Discord.")
+                print(f"✅ Sent {len(new_links[:30])} links to Discord at {now}.")
 
-            await asyncio.sleep(60)  # wait 1 minute before checking again
+            await asyncio.sleep(60)  # Wait 1 minute before checking again
 
 
 # ---- RUN BOT ----
