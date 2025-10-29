@@ -1,3 +1,5 @@
+import sys, types
+sys.modules['audioop'] = types.SimpleNamespace()
 import os
 import re
 import time
@@ -8,10 +10,6 @@ import discord
 from discord import Embed
 from datetime import datetime, timezone
 from flask import Flask
-
-# Patch audioop for Python 3.13
-import sys
-sys.modules['audioop'] = types.SimpleNamespace()
 
 # Environment variables
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
