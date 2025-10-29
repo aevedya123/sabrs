@@ -1,83 +1,89 @@
-import os
-import requests
 import discord
-from discord.ext import commands, tasks
+from discord.ext import tasks
+import requests
 import asyncio
-import datetime
+import os
+from datetime import datetime, timezone
 from keep_alive import keep_alive
-keep_alive()
 
-# ==== CONFIG ====
+# ==============================
+# CONFIGURATION
+# ==============================
+GROUP_ID = os.getenv("GROUP_ID")
+ROBLOX_COOKIE = os.getenv("ROBLOX_COOKIE")
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 CHANNEL_ID = int(os.getenv("CHANNEL_ID"))
-ROBLOX_COOKIE = os.getenv("ROBLOX_COOKIE")
-SERVER_ID = os.getenv("SERVER_ID")
 
+# ==============================
+# DISCORD CLIENT SETUP
+# ==============================
 intents = discord.Intents.default()
-bot = commands.Bot(command_prefix="!", intents=intents)
+client = discord.Client(intents=intents)
 
-# ==== GRAB LINKS FUNCTION ====
-async def grab_links():
-    headers = {
-        ".ROBLOSECURITY": ROBLOX_COOKIE,
-        "User-Agent": "Roblox/WinInet"
-    }
-    url = f"https://groups.roblox.com/v1/groups/{SERVER_ID}/wall/posts"
-    response = requests.get(url, cookies=headers)
+headers = {
+    "Cookie": f".ROBLOSECURITY={ROBLOX_COOKIE}",
+    "Content-Type": "application/json"
+}
 
-    if response.status_code != 200:
-        return None
+# Helper function to get group wall posts and extract share links
+def get_group_links():
+    url = f"https://groups.roblox.com/v2/groups/{GROUP_ID}/wall/posts"
+    try:
+        response = requests.get(url, headers=headers)
+        data = response.json()
 
-    data = response.json()
-    posts = data.get("data", [])
-    links = [p["body"] for p in posts if "roblox.com/share?code=" in p["body"]]
-    return links[:10] if links else None
+        links = []
+        for post in data.get("data", []):
+            text = post.get("body", "")
+            for word in text.split():
+                if word.startswith("https://www.roblox.com/share?code="):
+                    links.append(word)
+        return links[:30]  # Max 30 per minute
+    except Exception as e:
+        print(f"Error fetching group links: {e}")
+        return []
 
+# Task to post links
+@tasks.loop(minutes=1)
+async def fetch_and_send_links():
+    try:
+        channel = client.get_channel(CHANNEL_ID)
+        if not channel:
+            print("❌ Channel not found!")
+            return
 
-# ==== TASK TO SEND LINKS ====
-@tasks.loop(minutes=10)
-async def send_links():
-    channel = bot.get_channel(CHANNEL_ID)
-    if not channel:
-        print("❌ Channel not found.")
-        return
+        links = get_group_links()
+        if not links:
+            print("No new links found.")
+            return
 
-    links = await grab_links()
-    if not links:
-        await channel.send("⚠️ No new links found.")
-        return
+        embed = discord.Embed(
+            title="📦 New Roblox Private Server Links",
+            description="\n".join(links),
+            color=discord.Color.blue()
+        )
 
-    # Prepare formatted link text
-    links_text = "\n".join(f"• {link}" for link in links)
+        now = datetime.now(timezone.utc)
+        embed.set_footer(
+            text=f"Made by SAB-RS • {discord.utils.format_dt(now, style='R')}"
+        )
 
-    # Timestamp for Discord (local for each user)
-    timestamp = int(datetime.datetime.utcnow().timestamp())
+        await channel.send(embed=embed)
+        print(f"✅ Sent {len(links)} links to Discord.")
 
-    embed = discord.Embed(
-        title="🔗 Roblox Private Server Links",
-        description=f"{links_text}\n\n🕒 Posted <t:{timestamp}:R>",
-        color=0x00ffcc
-    )
-    embed.set_footer(text="Made by SAB-RS")
+    except Exception as e:
+        print(f"⚠️ Bot crashed: {e}")
 
-    await channel.send(embed=embed)
-    print(f"✅ Sent {len(links)} links at {datetime.datetime.now()}")
-
-
-# ==== EVENTS ====
-@bot.event
+@client.event
 async def on_ready():
-    print(f"✅ Logged in as {bot.user}")
-    send_links.start()
+    print(f"✅ Logged in as {client.user}")
+    fetch_and_send_links.start()
 
-
-# ==== KEEP ALIVE (if using Flask/ping) ====
-from keep_alive import keep_alive
+# Start Flask keep_alive server
 keep_alive()
 
-# ==== RUN ====
-async def main():
-    async with bot:
-        await bot.start(DISCORD_TOKEN)
-
-asyncio.run(main())
+# Start bot loop
+try:
+    asyncio.run(client.start(DISCORD_TOKEN))
+except KeyboardInterrupt:
+    print("Bot stopped manually.")
