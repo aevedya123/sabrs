@@ -1,16 +1,11 @@
 services:
   - type: web
-    name: sabrs-link-bot
+    name: discord-link-bot
     env: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: python main.py
+    plan: free
+    region: oregon   # you can change this if you’re elsewhere
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python main.py"
     envVars:
-      - key: DISCORD_TOKEN
-        sync: false
-      - key: CHANNEL_ID
-        sync: false
-      - key: GROUP_ID
-        sync: false
-      - key: ROBLOX_COOKIE
-        sync: false
-    autoDeploy: true
+      - key: PYTHON_VERSION
+        value: 3.11.9
